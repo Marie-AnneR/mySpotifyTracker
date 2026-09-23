@@ -1,0 +1,24 @@
+'use client';
+
+import { generateCodeVerifier, generateCodeChallenge } from '@/lib/pkce';
+import { buildSpotifyAuthorizeUrl } from '@/services/spotifyAuth';
+
+export default function SpotifyLoginButton() {
+  const handleLogin = async () => {
+    const verifier = generateCodeVerifier();
+    const challenge = await generateCodeChallenge(verifier);
+
+    localStorage.setItem('spotify_code_verifier', verifier);
+
+    window.location.href = buildSpotifyAuthorizeUrl(challenge);
+  };
+
+  return (
+    <button
+      onClick={handleLogin}
+      className="rounded-full bg-green-500 px-6 py-3 font-semibold text-black hover:bg-green-400"
+    >
+      Connect with Spotify
+    </button>
+  );
+}

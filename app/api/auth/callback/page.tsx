@@ -3,11 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  exchangeCodeForToken,
-  fetchCurrentUser,
-  SESSION_STORAGE_KEY,
-} from '@/services/spotifyAuth';
+import { exchangeCodeForToken } from '@/services/spotifyAuth';
+import { saveSession } from '@/services/spotifySession';
+import { fetchCurrentUser } from '@/services/spotifyUser';
 
 function CallbackContent() {
   const router = useRouter();
@@ -45,7 +43,7 @@ function CallbackContent() {
     exchangeCodeForToken(code, verifier)
       .then(async (tokens) => {
         const user = await fetchCurrentUser(tokens.accessToken);
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ ...tokens, user }));
+        saveSession({ ...tokens, user });
         localStorage.removeItem('spotify_code_verifier');
         // replace : l'URL contenant le code ne reste pas dans l'historique
         router.replace('/');

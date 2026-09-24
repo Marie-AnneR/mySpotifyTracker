@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from 'react';
 import SpotifyLoginButton from '@/components/SpotifyLoginButton';
-import { clearSession, SESSION_STORAGE_KEY } from '@/services/spotifyAuth';
+import { clearSession, SESSION_STORAGE_KEY } from '@/services/spotifySession';
 import { SpotifySession } from '@/types/spotify';
 
 const SESSION_CHANGE_EVENT = 'spotify-session-change';

@@ -2,7 +2,7 @@ import { fetchTopItems, TopItemsOptions } from '@/services/spotifyTop';
 import { SpotifyTrackResponse, Track } from '@/types/track';
 
 // Champs clés vérifiés : sans eux, un track n'est pas exploitable pour les KPI
-function isValidTrack(item: unknown): item is SpotifyTrackResponse {
+export function isValidTrack(item: unknown): item is SpotifyTrackResponse {
   if (typeof item !== 'object' || item === null) return false;
   const track = item as Record<string, unknown>;
   const album = track.album as Record<string, unknown> | undefined;
@@ -17,7 +17,7 @@ function isValidTrack(item: unknown): item is SpotifyTrackResponse {
   );
 }
 
-function toTrack(raw: SpotifyTrackResponse): Track {
+export function toTrack(raw: SpotifyTrackResponse): Track {
   return {
     id: raw.id,
     name: raw.name,

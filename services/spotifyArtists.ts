@@ -1,15 +1,5 @@
-import { spotifyFetch } from '@/services/spotifyClient';
-import { Artist, SpotifyArtistResponse, TIME_RANGES, TimeRange } from '@/types/artist';
-import { SpotifyPage } from '@/types/spotify';
-
-// Limite imposée par Spotify sur /me/top/*
-const MAX_LIMIT = 50;
-
-interface GetTopArtistsOptions {
-  timeRange?: TimeRange;
-  limit?: number;
-  offset?: number;
-}
+import { fetchTopItems, TopItemsOptions } from '@/services/spotifyTop';
+import { Artist, SpotifyArtistResponse } from '@/types/artist';
 
 function isValidArtist(item: unknown): item is SpotifyArtistResponse {
   if (typeof item !== 'object' || item === null) return false;
@@ -29,33 +19,6 @@ function toArtist(raw: SpotifyArtistResponse): Artist {
   };
 }
 
-export async function getTopArtists({
-  timeRange = 'medium_term',
-  limit = 20,
-  offset = 0,
-}: GetTopArtistsOptions = {}): Promise<Artist[]> {
-  if (!TIME_RANGES.includes(timeRange)) {
-    throw new RangeError(`time_range invalide : ${timeRange}`);
-  }
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
-    throw new RangeError(`limit doit être un entier entre 1 et ${MAX_LIMIT} (reçu : ${limit})`);
-  }
-
-  const page = await spotifyFetch<SpotifyPage<unknown>>('/me/top/artists', {
-    params: { time_range: timeRange, limit, offset },
-  });
-
-  if (!Array.isArray(page?.items)) {
-    throw new Error('Réponse Spotify inattendue pour /me/top/artists : items manquant');
-  }
-
-  // Les items mal formés sont ignorés plutôt que de faire échouer toute la liste
-  const validItems = page.items.filter(isValidArtist);
-  if (validItems.length < page.items.length) {
-    console.warn(
-      `[getTopArtists] ${page.items.length - validItems.length} artiste(s) mal formé(s) ignoré(s)`
-    );
-  }
-
-  return validItems.map(toArtist);
+export function getTopArtists(options: TopItemsOptions = {}): Promise<Artist[]> {
+  return fetchTopItems('artists', options, isValidArtist, toArtist);
 }

@@ -1,0 +1,66 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { filterLastDays, getCoveredRange, groupByDay } from '@/lib/recentPlays';
+import { getRecentlyPlayed } from '@/services/spotifyRecentlyPlayed';
+import { RecentPlay } from '@/types/recentPlay';
+
+// Page de vérification réservée au dev : teste getRecentlyPlayed et les helpers temporels (#10)
+type Result = { plays: RecentPlay[] } | { error: string };
+
+const formatDateTime = (ms: number) =>
+  new Date(ms).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+const formatTime = (ms: number) =>
+  new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+export default function RecentlyPlayedDevPage() {
+  const [result, setResult] = useState<Result | null>(null);
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_APP_ENV !== 'development') return;
+
+    getRecentlyPlayed()
+      .then((plays) => setResult({ plays }))
+      .catch((err) => setResult({ error: err.message }));
+  }, []);
+
+  if (process.env.NEXT_PUBLIC_APP_ENV !== 'development') {
+    return <p className="p-8">Page disponible uniquement en développement.</p>;
+  }
+  if (!result) return <p className="p-8">Chargement...</p>;
+  if ('error' in result) return <p className="p-8 text-red-500">{result.error}</p>;
+  if (result.plays.length === 0) {
+    return <p className="p-8">Aucune écoute récente exploitable.</p>;
+  }
+
+  const range = getCoveredRange(result.plays);
+  const lastWeek = filterLastDays(result.plays, 7);
+
+  return (
+    <div className="space-y-6 p-8">
+      <p className="text-sm text-zinc-500">
+        {result.plays.length} écoutes · {lastWeek.length} sur les 7 derniers jours
+        {range && ` · du ${formatDateTime(range.from)} au ${formatDateTime(range.to)}`}
+      </p>
+      {[...groupByDay(result.plays)].map(([day, plays]) => (
+        <section key={day}>
+          <h2 className="mb-2 text-lg font-semibold">
+            {day} ({plays.length})
+          </h2>
+          <ul className="space-y-1">
+            {plays.map((play) => (
+              <li key={play.playedAt} className="text-sm">
+                <span className="text-zinc-500">{formatTime(play.playedAtMs)}</span>{' '}
+                <strong>{play.track.name}</strong> –{' '}
+                {play.track.artists.map((artist) => artist.name).join(', ')}
+                {play.context && (
+                  <span className="text-zinc-500"> · via {play.context.type}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}

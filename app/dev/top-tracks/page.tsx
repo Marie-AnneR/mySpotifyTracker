@@ -1,22 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getTopArtists } from '@/services/spotifyArtists';
-import { Artist } from '@/types/artist';
+import { getTopTracks } from '@/services/spotifyTracks';
 import { TIME_RANGES, TimeRange } from '@/types/spotify';
+import { Track } from '@/types/track';
 
-// Page de vérification réservée au dev : teste getTopArtists sur les 3 périodes (#8)
-type Result = { artists: Artist[] } | { error: string };
+// Page de vérification réservée au dev : teste getTopTracks sur les 3 périodes (#9)
+type Result = { tracks: Track[] } | { error: string };
 
-export default function TopArtistsDevPage() {
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+}
+
+export default function TopTracksDevPage() {
   const [results, setResults] = useState<Partial<Record<TimeRange, Result>>>({});
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_APP_ENV !== 'development') return;
 
     for (const timeRange of TIME_RANGES) {
-      getTopArtists({ timeRange, limit: 10 })
-        .then((artists) => setResults((prev) => ({ ...prev, [timeRange]: { artists } })))
+      getTopTracks({ timeRange, limit: 10 })
+        .then((tracks) => setResults((prev) => ({ ...prev, [timeRange]: { tracks } })))
         .catch((err) =>
           setResults((prev) => ({ ...prev, [timeRange]: { error: err.message } }))
         );
@@ -36,14 +41,17 @@ export default function TopArtistsDevPage() {
             <h2 className="mb-4 text-xl font-semibold">{timeRange}</h2>
             {!result && <p>Chargement...</p>}
             {result && 'error' in result && <p className="text-red-500">{result.error}</p>}
-            {result && 'artists' in result && (
+            {result && 'tracks' in result && (
               <ol className="list-decimal space-y-2 pl-5">
-                {result.artists.map((artist) => (
-                  <li key={artist.id}>
-                    <strong>{artist.name}</strong>
+                {result.tracks.map((track) => (
+                  <li key={track.id}>
+                    <strong>{track.name}</strong>
+                    <span className="block text-sm">
+                      {track.artists.map((artist) => artist.name).join(', ')}
+                    </span>
                     <span className="block text-sm text-zinc-500">
-                      popularité : {artist.popularity ?? 'n/a'} · genres :{' '}
-                      {artist.genres.join(', ') || 'n/a'} · images : {artist.images.length}
+                      {track.album.name} · {formatDuration(track.durationMs)} · popularité :{' '}
+                      {track.popularity ?? 'n/a'}
                     </span>
                   </li>
                 ))}

@@ -1,7 +1,8 @@
+import { mapValidItems } from '@/mappers/common';
+import { isSavedTrackObject, toLikedTrack } from '@/mappers/likedTrack';
 import { spotifyFetch } from '@/services/spotifyClient';
-import { isValidTrack, toTrack } from '@/services/spotifyTracks';
-import { LikedTrack, SpotifySavedTrackResponse } from '@/types/likedTrack';
-import { SpotifyPage } from '@/types/spotify';
+import { LikedTrack } from '@/types/models';
+import { SpotifyPage } from '@/types/spotifyApi';
 
 // Limite imposée par Spotify sur /me/tracks
 const PAGE_SIZE = 50;
@@ -14,24 +15,6 @@ interface GetLikedTracksOptions {
   maxTracks?: number;
   // Appelé après chaque page, pour afficher une progression
   onProgress?: (loaded: number, total: number) => void;
-}
-
-function isValidSavedTrack(item: unknown): item is SpotifySavedTrackResponse {
-  if (typeof item !== 'object' || item === null) return false;
-  const saved = item as Record<string, unknown>;
-  return (
-    typeof saved.added_at === 'string' &&
-    !Number.isNaN(Date.parse(saved.added_at)) &&
-    isValidTrack(saved.track)
-  );
-}
-
-function toLikedTrack(raw: SpotifySavedTrackResponse): LikedTrack {
-  return {
-    track: toTrack(raw.track),
-    addedAt: raw.added_at,
-    addedAtMs: Date.parse(raw.added_at),
-  };
 }
 
 function fetchPage(offset: number) {
@@ -67,16 +50,10 @@ export async function getLikedTracks({
     onProgress?.(Math.min(rawItems.length, total), total);
   }
 
-  const validItems = rawItems.filter(isValidSavedTrack);
-  if (validItems.length < rawItems.length) {
-    console.warn(`[getLikedTracks] ${rawItems.length - validItems.length} titre(s) ignoré(s)`);
-  }
-
   // Déduplication : si un like/unlike a lieu pendant la récupération, les offsets se décalent
   // et un même titre peut apparaître sur deux pages. On garde la 1re occurrence (la plus récente).
   const seen = new Set<string>();
-  const likedTracks = validItems
-    .map(toLikedTrack)
+  const likedTracks = mapValidItems(rawItems, isSavedTrackObject, toLikedTrack, '/me/tracks')
     .filter(({ track }) => {
       if (seen.has(track.id)) return false;
       seen.add(track.id);

@@ -1,19 +1,10 @@
+import { toUser } from '@/mappers/user';
 import { spotifyFetch } from '@/services/spotifyClient';
-import { SpotifyUser } from '@/types/spotify';
-
-interface SpotifyUserResponse {
-  id: string;
-  display_name: string | null;
-  images?: { url: string }[];
-}
+import { User } from '@/types/models';
+import { SpotifyUserObject } from '@/types/spotifyApi';
 
 // accessToken optionnel : au callback, la session n'est pas encore stockée
-export async function fetchCurrentUser(accessToken?: string): Promise<SpotifyUser> {
-  const data = await spotifyFetch<SpotifyUserResponse>('/me', { accessToken });
-
-  return {
-    id: data.id,
-    displayName: data.display_name ?? data.id,
-    imageUrl: data.images?.[0]?.url ?? null,
-  };
+export async function fetchCurrentUser(accessToken?: string): Promise<User> {
+  const data = await spotifyFetch<SpotifyUserObject>('/me', { accessToken });
+  return toUser(data);
 }

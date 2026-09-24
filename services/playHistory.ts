@@ -1,6 +1,6 @@
 import { getRecentlyPlayed } from '@/services/spotifyRecentlyPlayed';
 import { getStoredSession } from '@/services/spotifySession';
-import { RecentPlay } from '@/types/recentPlay';
+import { PlayEvent } from '@/types/models';
 
 // Spotify ne renvoie que les 50 dernières écoutes : on les accumule dans le navigateur
 // à chaque synchro pour construire un historique plus long que l'API.
@@ -10,29 +10,40 @@ const MAX_STORED_PLAYS = 5_000;
 const RECENTLY_PLAYED_LIMIT = 50;
 
 export interface SyncResult {
-  plays: RecentPlay[];
+  plays: PlayEvent[];
   added: number;
   // true si des écoutes ont pu être manquées depuis la dernière synchro (> 50 écoutes entre-temps)
   hasGap: boolean;
 }
 
 // Une même écoute = même titre au même instant
-const playKey = (play: RecentPlay) => `${play.playedAt}:${play.track.id}`;
+const playKey = (play: PlayEvent) => `${play.playedAt}:${play.track.id}`;
 // Historique par utilisateur : deux comptes sur le même navigateur ne se mélangent pas
 const storageKey = (userId: string) => `${STORAGE_PREFIX}:${userId}`;
 
-export function getPlayHistory(userId: string): RecentPlay[] {
+// Migration des écoutes stockées avant #12 : album.images[] → album.imageUrl
+function migrateStoredPlay(play: PlayEvent): PlayEvent {
+  const album = play.track.album as PlayEvent['track']['album'] & { images?: { url: string }[] };
+  if (album.imageUrl !== undefined) return play;
+  const { images, ...rest } = album;
+  return {
+    ...play,
+    track: { ...play.track, album: { ...rest, imageUrl: images?.[0]?.url ?? null } },
+  };
+}
+
+export function getPlayHistory(userId: string): PlayEvent[] {
   const raw = localStorage.getItem(storageKey(userId));
   if (!raw) return [];
   try {
     const plays = JSON.parse(raw);
-    return Array.isArray(plays) ? plays : [];
+    return Array.isArray(plays) ? plays.map(migrateStoredPlay) : [];
   } catch {
     return [];
   }
 }
 
-function savePlayHistory(userId: string, plays: RecentPlay[]): void {
+function savePlayHistory(userId: string, plays: PlayEvent[]): void {
   try {
     localStorage.setItem(storageKey(userId), JSON.stringify(plays));
   } catch (err) {

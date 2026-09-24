@@ -5,6 +5,14 @@ import { buildSpotifyAuthorizeUrl } from '@/services/spotifyAuth';
 
 export default function SpotifyLoginButton() {
   const handleLogin = async () => {
+    // Le verifier est stocké dans le localStorage, qui est propre à chaque origine :
+    // le flow doit démarrer sur la même origine que le redirect URI.
+    const redirectOrigin = new URL(process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!).origin;
+    if (window.location.origin !== redirectOrigin) {
+      window.location.href = redirectOrigin + window.location.pathname;
+      return;
+    }
+
     const verifier = generateCodeVerifier();
     const challenge = await generateCodeChallenge(verifier);
 

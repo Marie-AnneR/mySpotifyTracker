@@ -1,5 +1,5 @@
 import Image from "next/image";
-import SpotifyLoginButton from '@/components/SpotifyLoginButton';
+import AuthStatus from '@/components/AuthStatus';
 
 
 export default function Home() {
@@ -39,7 +39,7 @@ export default function Home() {
             </a>{" "}
             center.
           </p>
-          <SpotifyLoginButton />
+          <AuthStatus />
 
         </div>
         <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">

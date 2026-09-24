@@ -34,6 +34,8 @@ function debugLog(...args: unknown[]) {
 
 // Marge avant expiration pour rafraîchir le token avant qu'une requête échoue
 const REFRESH_MARGIN_MS = 60_000;
+// Au-delà, on remonte l'erreur 429 plutôt que de bloquer l'utilisateur
+const MAX_RETRY_AFTER_SECONDS = 10;
 // Refresh en cours, partagé par les appels simultanés pour n'en faire qu'un seul
 let refreshPromise: Promise<string> | null = null;
 
@@ -120,6 +122,16 @@ export async function spotifyFetch<T>(
   // Token révoqué ou expiré plus tôt que prévu : un refresh puis une seule nouvelle tentative
   if (response.status === 401 && !accessToken) {
     response = await send(await refreshSession());
+  }
+
+  // Rate limit : on attend le délai demandé par Spotify puis une seule nouvelle tentative
+  if (response.status === 429) {
+    const retryAfterSeconds = Number(response.headers.get('Retry-After') ?? 1);
+    if (retryAfterSeconds <= MAX_RETRY_AFTER_SECONDS) {
+      debugLog(`rate limit, nouvelle tentative dans ${retryAfterSeconds}s`);
+      await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
+      response = await send(await resolveAccessToken(accessToken));
+    }
   }
 
   if (!response.ok) {

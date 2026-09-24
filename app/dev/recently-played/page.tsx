@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { filterLastDays, getCoveredRange, groupByDay } from '@/lib/recentPlays';
-import { getRecentlyPlayed } from '@/services/spotifyRecentlyPlayed';
-import { RecentPlay } from '@/types/recentPlay';
+import { syncPlayHistory, SyncResult } from '@/services/playHistory';
 
-// Page de vérification réservée au dev : teste getRecentlyPlayed et les helpers temporels (#10)
-type Result = { plays: RecentPlay[] } | { error: string };
+// Page de vérification réservée au dev : historique accumulé (#11) et helpers temporels (#10)
+type Result = SyncResult | { error: string };
 
 const formatDateTime = (ms: number) =>
   new Date(ms).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
@@ -19,8 +18,8 @@ export default function RecentlyPlayedDevPage() {
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_APP_ENV !== 'development') return;
 
-    getRecentlyPlayed()
-      .then((plays) => setResult({ plays }))
+    syncPlayHistory()
+      .then(setResult)
       .catch((err) => setResult({ error: err.message }));
   }, []);
 
@@ -39,9 +38,15 @@ export default function RecentlyPlayedDevPage() {
   return (
     <div className="space-y-6 p-8">
       <p className="text-sm text-zinc-500">
-        {result.plays.length} écoutes · {lastWeek.length} sur les 7 derniers jours
+        {result.plays.length} écoutes en historique (+{result.added} à cette synchro) ·{' '}
+        {lastWeek.length} sur les 7 derniers jours
         {range && ` · du ${formatDateTime(range.from)} au ${formatDateTime(range.to)}`}
       </p>
+      {result.hasGap && (
+        <p className="text-sm text-amber-600">
+          Plus de 50 écoutes depuis la dernière synchro : certaines ont pu être manquées.
+        </p>
+      )}
       {[...groupByDay(result.plays)].map(([day, plays]) => (
         <section key={day}>
           <h2 className="mb-2 text-lg font-semibold">

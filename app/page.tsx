@@ -1,5 +1,6 @@
 import Image from "next/image";
 import AuthStatus from '@/components/AuthStatus';
+import PlayHistorySync from '@/components/PlayHistorySync';
 
 
 export default function Home() {
@@ -40,6 +41,7 @@ export default function Home() {
             center.
           </p>
           <AuthStatus />
+          <PlayHistorySync />
 
         </div>
         <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">

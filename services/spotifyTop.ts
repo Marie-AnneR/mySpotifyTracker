@@ -1,5 +1,7 @@
+import { mapValidItems } from '@/mappers/common';
 import { spotifyFetch } from '@/services/spotifyClient';
-import { SpotifyPage, TIME_RANGES, TimeRange } from '@/types/spotify';
+import { TIME_RANGES, TimeRange } from '@/types/spotify';
+import { SpotifyPage } from '@/types/spotifyApi';
 
 // Limite imposée par Spotify sur /me/top/*
 const MAX_LIMIT = 50;
@@ -11,7 +13,7 @@ export interface TopItemsOptions {
 }
 
 // Logique commune à /me/top/artists et /me/top/tracks :
-// validation des paramètres, appel API, filtrage des items mal formés, mapping
+// validation des paramètres, appel API, puis mapping vers le modèle interne
 export async function fetchTopItems<Raw, Model>(
   type: 'artists' | 'tracks',
   { timeRange = 'medium_term', limit = 20, offset = 0 }: TopItemsOptions,
@@ -34,11 +36,5 @@ export async function fetchTopItems<Raw, Model>(
     throw new Error(`Réponse Spotify inattendue pour ${path} : items manquant`);
   }
 
-  // Les items mal formés sont ignorés plutôt que de faire échouer toute la liste
-  const validItems = page.items.filter(isValid);
-  if (validItems.length < page.items.length) {
-    console.warn(`[${path}] ${page.items.length - validItems.length} item(s) mal formé(s) ignoré(s)`);
-  }
-
-  return validItems.map(toModel);
+  return mapValidItems(page.items, isValid, toModel, path);
 }

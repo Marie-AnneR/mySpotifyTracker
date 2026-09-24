@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getTopArtists } from '@/services/spotifyArtists';
-import { Artist } from '@/types/artist';
+import { Artist } from '@/types/models';
 import { TIME_RANGES, TimeRange } from '@/types/spotify';
 
 // Page de vérification réservée au dev : teste getTopArtists sur les 3 périodes (#8)
@@ -43,7 +43,7 @@ export default function TopArtistsDevPage() {
                     <strong>{artist.name}</strong>
                     <span className="block text-sm text-zinc-500">
                       popularité : {artist.popularity ?? 'n/a'} · genres :{' '}
-                      {artist.genres.join(', ') || 'n/a'} · images : {artist.images.length}
+                      {artist.genres.join(', ') || 'n/a'} · image : {artist.imageUrl ? 'oui' : 'non'}
                     </span>
                   </li>
                 ))}

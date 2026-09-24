@@ -1,6 +1,6 @@
 import { refreshAccessToken } from '@/services/spotifyAuth';
 import { clearSession, getStoredSession, saveSession } from '@/services/spotifySession';
-import { SpotifyPage } from '@/types/spotify';
+import { SpotifyPage } from '@/types/spotifyApi';
 
 // Point d'entrée unique pour tous les appels à l'API Web Spotify
 const SPOTIFY_API_BASE_URL = 'https://api.spotify.com/v1';

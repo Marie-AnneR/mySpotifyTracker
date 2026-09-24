@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { filterLastDays, getCoveredRange, groupByDay } from '@/lib/recentPlays';
+import { filterLastDays, getCoveredRange, groupByDay, playedAt } from '@/lib/timeline';
 import { syncPlayHistory, SyncResult } from '@/services/playHistory';
 
 // Page de vérification réservée au dev : historique accumulé (#11) et helpers temporels (#10)
@@ -32,8 +32,8 @@ export default function RecentlyPlayedDevPage() {
     return <p className="p-8">Aucune écoute récente exploitable.</p>;
   }
 
-  const range = getCoveredRange(result.plays);
-  const lastWeek = filterLastDays(result.plays, 7);
+  const range = getCoveredRange(result.plays, playedAt);
+  const lastWeek = filterLastDays(result.plays, playedAt, 7);
 
   return (
     <div className="space-y-6 p-8">
@@ -47,7 +47,7 @@ export default function RecentlyPlayedDevPage() {
           Plus de 50 écoutes depuis la dernière synchro : certaines ont pu être manquées.
         </p>
       )}
-      {[...groupByDay(result.plays)].map(([day, plays]) => (
+      {[...groupByDay(result.plays, playedAt)].map(([day, plays]) => (
         <section key={day}>
           <h2 className="mb-2 text-lg font-semibold">
             {day} ({plays.length})

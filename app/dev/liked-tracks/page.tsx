@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { groupLikesByMonth } from '@/lib/likedTracks';
+import { addedAt, groupByMonth } from '@/lib/timeline';
 import { getLikedTracks } from '@/services/spotifyLikedTracks';
-import { LikedTrack } from '@/types/likedTrack';
+import { LikedTrack } from '@/types/models';
 
 // Page de vérification réservée au dev : teste getLikedTracks et la timeline mensuelle (#11)
 type Result = { likes: LikedTrack[]; durationMs: number } | { error: string };
@@ -34,7 +34,7 @@ export default function LikedTracksDevPage() {
   if ('error' in result) return <p className="p-8 text-red-500">{result.error}</p>;
   if (result.likes.length === 0) return <p className="p-8">Aucun titre liké.</p>;
 
-  const months = [...groupLikesByMonth(result.likes)];
+  const months = [...groupByMonth(result.likes, addedAt)];
   const maxCount = Math.max(...months.map(([, likes]) => likes.length));
 
   return (

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { getTopTracks } from '@/services/spotifyTracks';
+import { Track } from '@/types/models';
 import { TIME_RANGES, TimeRange } from '@/types/spotify';
-import { Track } from '@/types/track';
 
 // Page de vérification réservée au dev : teste getTopTracks sur les 3 périodes (#9)
 type Result = { tracks: Track[] } | { error: string };

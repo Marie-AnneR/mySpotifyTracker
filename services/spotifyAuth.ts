@@ -52,3 +52,34 @@ export async function exchangeCodeForToken(
     expiresAt: Date.now() + data.expires_in * 1000,
   };
 }
+
+// Flow PKCE : pas de client secret, le client_id suffit
+export async function refreshAccessToken(
+  refreshToken: string
+): Promise<Omit<SpotifySession, 'user'>> {
+  const params = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!,
+  });
+
+  const response = await fetch(SPOTIFY_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Spotify token refresh failed: ${errorBody}`);
+  }
+
+  const data = await response.json();
+
+  return {
+    accessToken: data.access_token,
+    // Spotify ne renvoie pas toujours un nouveau refresh token : on garde l'ancien
+    refreshToken: data.refresh_token ?? refreshToken,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
+}

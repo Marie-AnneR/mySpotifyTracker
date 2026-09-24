@@ -2,10 +2,12 @@
 
 import { useSyncExternalStore } from 'react';
 import SpotifyLoginButton from '@/components/SpotifyLoginButton';
-import { clearSession, SESSION_STORAGE_KEY } from '@/services/spotifySession';
+import {
+  clearSession,
+  SESSION_CHANGE_EVENT,
+  SESSION_STORAGE_KEY,
+} from '@/services/spotifySession';
 import { SpotifySession } from '@/types/spotify';
-
-const SESSION_CHANGE_EVENT = 'spotify-session-change';
 
 function subscribe(onChange: () => void) {
   window.addEventListener('storage', onChange);
@@ -34,11 +36,6 @@ export default function AuthStatus() {
     return <SpotifyLoginButton />;
   }
 
-  const handleLogout = () => {
-    clearSession();
-    window.dispatchEvent(new Event(SESSION_CHANGE_EVENT));
-  };
-
   return (
     <div className="flex items-center gap-4">
       {session.user.imageUrl && (
@@ -53,7 +50,7 @@ export default function AuthStatus() {
         Connecté en tant que <strong>{session.user.displayName}</strong>
       </p>
       <button
-        onClick={handleLogout}
+        onClick={clearSession}
         className="rounded-full border px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"
       >
         Se déconnecter

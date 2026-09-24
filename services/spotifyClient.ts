@@ -1,4 +1,5 @@
-import { getStoredSession } from '@/services/spotifySession';
+import { refreshAccessToken } from '@/services/spotifyAuth';
+import { clearSession, getStoredSession, saveSession } from '@/services/spotifySession';
 import { SpotifyPage } from '@/types/spotify';
 
 // Point d'entrée unique pour tous les appels à l'API Web Spotify
@@ -31,15 +32,45 @@ function debugLog(...args: unknown[]) {
   if (isDev) console.debug('[spotifyClient]', ...args);
 }
 
-function resolveAccessToken(explicitToken?: string): string {
+// Marge avant expiration pour rafraîchir le token avant qu'une requête échoue
+const REFRESH_MARGIN_MS = 60_000;
+// Refresh en cours, partagé par les appels simultanés pour n'en faire qu'un seul
+let refreshPromise: Promise<string> | null = null;
+
+function refreshSession(): Promise<string> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const session = getStoredSession();
+    if (!session?.refreshToken) {
+      throw new SpotifyApiError('Aucune session Spotify, connecte-toi', 401);
+    }
+    try {
+      const tokens = await refreshAccessToken(session.refreshToken);
+      saveSession({ ...session, ...tokens });
+      debugLog('token rafraîchi');
+      return tokens.accessToken;
+    } catch (err) {
+      debugLog('échec du refresh', err);
+      clearSession();
+      throw new SpotifyApiError('Session Spotify expirée, reconnecte-toi', 401);
+    }
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
+async function resolveAccessToken(explicitToken?: string): Promise<string> {
   if (explicitToken) return explicitToken;
 
   const session = getStoredSession();
   if (!session) {
     throw new SpotifyApiError('Aucune session Spotify, connecte-toi', 401);
   }
-  if (Date.now() >= session.expiresAt) {
-    throw new SpotifyApiError('Session Spotify expirée, reconnecte-toi', 401);
+  if (Date.now() >= session.expiresAt - REFRESH_MARGIN_MS) {
+    return refreshSession();
   }
   return session.accessToken;
 }
@@ -60,28 +91,36 @@ export async function spotifyFetch<T>(
   { params, body, accessToken, headers, ...init }: SpotifyFetchOptions = {}
 ): Promise<T> {
   const url = buildUrl(pathOrUrl, params);
-  const token = resolveAccessToken(accessToken);
   const method = init.method ?? 'GET';
-  const startedAt = performance.now();
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...init,
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body !== undefined && { 'Content-Type': 'application/json' }),
-        ...headers,
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  } catch (err) {
-    debugLog(method, url, 'network error', err);
-    throw new SpotifyApiError('Impossible de joindre Spotify, vérifie ta connexion', 0);
+  const send = async (token: string): Promise<Response> => {
+    const startedAt = performance.now();
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...init,
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(body !== undefined && { 'Content-Type': 'application/json' }),
+          ...headers,
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      debugLog(method, url, 'network error', err);
+      throw new SpotifyApiError('Impossible de joindre Spotify, vérifie ta connexion', 0);
+    }
+    debugLog(method, url, response.status, `${Math.round(performance.now() - startedAt)}ms`);
+    return response;
+  };
+
+  let response = await send(await resolveAccessToken(accessToken));
+
+  // Token révoqué ou expiré plus tôt que prévu : un refresh puis une seule nouvelle tentative
+  if (response.status === 401 && !accessToken) {
+    response = await send(await refreshSession());
   }
-
-  debugLog(method, url, response.status, `${Math.round(performance.now() - startedAt)}ms`);
 
   if (!response.ok) {
     // Format d'erreur Spotify : { error: { status, message } }

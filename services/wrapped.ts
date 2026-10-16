@@ -23,14 +23,28 @@ async function getPeriodData(timeRange: TimeRange): Promise<PeriodData> {
   return { timeRange, tracks, artists };
 }
 
+export type WrappedResult = WrappedKpis & { genresReport: EnrichmentReport };
+
+// Calcul en cours, partagé par les appels simultanés (StrictMode, plusieurs composants) :
+// évite de relancer 6 appels Spotify et l'enrichissement des genres pour rien
+const inFlight = new Map<string, Promise<WrappedResult>>();
+
+export function getWrappedKpis(options?: PeriodKpisOptions): Promise<WrappedResult> {
+  const key = JSON.stringify(options ?? {});
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+
+  const promise = computeWrappedKpis(options).finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
+}
+
 // 1. 6 appels Spotify en parallèle (2 endpoints × 3 périodes). Si un seul échoue, tout échoue :
 //    un Wrapped partiel serait trompeur.
 // 2. Enrichissement des genres, une seule fois pour les artistes des 3 périodes dédupliqués
 //    (un même artiste apparaît souvent dans plusieurs périodes). Ne fait jamais échouer le Wrapped.
 // 3. Calcul des KPIs par période.
-export async function getWrappedKpis(
-  options?: PeriodKpisOptions
-): Promise<WrappedKpis & { genresReport: EnrichmentReport }> {
+async function computeWrappedKpis(options?: PeriodKpisOptions): Promise<WrappedResult> {
   const periodsData = await Promise.all(TIME_RANGES.map(getPeriodData));
 
   const uniqueArtists = [

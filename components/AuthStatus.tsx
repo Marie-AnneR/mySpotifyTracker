@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useSyncExternalStore } from 'react';
 import SpotifyLoginButton from '@/components/SpotifyLoginButton';
 import {
@@ -37,7 +38,7 @@ export default function AuthStatus() {
   }
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-4">
       {session.user.imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element -- image distante Spotify, pas besoin d'optimisation
         <img
@@ -49,6 +50,12 @@ export default function AuthStatus() {
       <p>
         Connecté en tant que <strong>{session.user.displayName}</strong>
       </p>
+      <Link
+        href="/wrapped"
+        className="rounded-full bg-green-500 px-4 py-2 text-sm font-semibold text-black hover:bg-green-400"
+      >
+        Voir mon Wrapped
+      </Link>
       <button
         onClick={clearSession}
         className="rounded-full border px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"

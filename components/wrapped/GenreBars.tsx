@@ -6,11 +6,10 @@ interface GenreBarsProps {
   emptyMessage: string;
 }
 
-// Top genres en barres horizontales, largeur relative au genre n°1
+// Top genres en barres horizontales. Échelle absolue : la largeur correspond au pourcentage
+// affiché (barre pleine = 100 %), pour que la barre ne contredise pas le chiffre.
 export default function GenreBars({ genres, emptyMessage }: GenreBarsProps) {
   if (genres.length === 0) return <EmptyMessage>{emptyMessage}</EmptyMessage>;
-
-  const maxShare = Math.max(...genres.map((genre) => genre.share));
 
   return (
     <ol className="space-y-3">
@@ -25,7 +24,7 @@ export default function GenreBars({ genres, emptyMessage }: GenreBarsProps) {
           <div className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
             <div
               className="h-full rounded-full bg-green-500"
-              style={{ width: `${(genre.share / maxShare) * 100}%` }}
+              style={{ width: `${Math.min(genre.share, 1) * 100}%` }}
             />
           </div>
           <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">

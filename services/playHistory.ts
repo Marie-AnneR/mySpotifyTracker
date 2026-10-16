@@ -16,10 +16,13 @@ export interface SyncResult {
   hasGap: boolean;
 }
 
+// Émis à chaque sauvegarde, pour que l'UI se mette à jour après une synchro
+export const PLAY_HISTORY_CHANGE_EVENT = 'spotify-play-history-change';
+
 // Une même écoute = même titre au même instant
 const playKey = (play: PlayEvent) => `${play.playedAt}:${play.track.id}`;
 // Historique par utilisateur : deux comptes sur le même navigateur ne se mélangent pas
-const storageKey = (userId: string) => `${STORAGE_PREFIX}:${userId}`;
+export const playHistoryStorageKey = (userId: string) => `${STORAGE_PREFIX}:${userId}`;
 
 // Migration des écoutes stockées avant #12 : album.images[] → album.imageUrl
 function migrateStoredPlay(play: PlayEvent): PlayEvent {
@@ -32,8 +35,8 @@ function migrateStoredPlay(play: PlayEvent): PlayEvent {
   };
 }
 
-export function getPlayHistory(userId: string): PlayEvent[] {
-  const raw = localStorage.getItem(storageKey(userId));
+// Lit le contenu brut du localStorage (utile aussi aux composants qui l'observent directement)
+export function parsePlayHistory(raw: string | null): PlayEvent[] {
   if (!raw) return [];
   try {
     const plays = JSON.parse(raw);
@@ -43,9 +46,14 @@ export function getPlayHistory(userId: string): PlayEvent[] {
   }
 }
 
+export function getPlayHistory(userId: string): PlayEvent[] {
+  return parsePlayHistory(localStorage.getItem(playHistoryStorageKey(userId)));
+}
+
 function savePlayHistory(userId: string, plays: PlayEvent[]): void {
   try {
-    localStorage.setItem(storageKey(userId), JSON.stringify(plays));
+    localStorage.setItem(playHistoryStorageKey(userId), JSON.stringify(plays));
+    window.dispatchEvent(new Event(PLAY_HISTORY_CHANGE_EVENT));
   } catch (err) {
     // Quota dépassé : l'historique existant reste en place, la synchro suivante réessaiera
     console.warn('[playHistory] sauvegarde impossible', err);

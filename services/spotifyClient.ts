@@ -34,8 +34,72 @@ function debugLog(...args: unknown[]) {
 
 // Marge avant expiration pour rafraîchir le token avant qu'une requête échoue
 const REFRESH_MARGIN_MS = 60_000;
-// Au-delà, on remonte l'erreur 429 plutôt que de bloquer l'utilisateur
+
+// --- Rate limiting et retry (stratégie détaillée dans docs/rate-limiting.md) ---
+// Nouvelles tentatives max après un 429 ou une erreur serveur passagère (3 essais au total)
+const MAX_RETRIES = 2;
+// Au-delà, on remonte l'erreur plutôt que de faire patienter l'utilisateur sans explication
 const MAX_RETRY_AFTER_SECONDS = 10;
+// Si Spotify ne précise pas de délai
+const DEFAULT_RETRY_AFTER_SECONDS = 1;
+// Erreurs serveur passagères : nouvelle tentative uniquement pour les GET (sans effet de bord)
+const RETRYABLE_SERVER_STATUSES = new Set([500, 502, 503, 504]);
+const SERVER_RETRY_BASE_DELAY_MS = 500;
+// Clé de debug (dev uniquement) : nombre de prochaines requêtes à faire échouer en 429
+const SIMULATE_429_KEY = 'debug_simulate_429';
+
+// Pause commune à toutes les requêtes après un 429 : sans elle, les requêtes parallèles
+// découvrent chacune le 429 et repartent toutes en même temps, ce qui en provoque un nouveau
+let cooldownUntil = 0;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Décalage aléatoire pour étaler les requêtes qui reprennent après une même pause
+const jitter = () => Math.random() * 250;
+
+function rateLimitWarn(...args: unknown[]) {
+  if (isDev) console.warn('[spotifyClient] rate limit', ...args);
+}
+
+// Retry-After est en secondes ("3") ou, plus rarement, une date HTTP
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds);
+  const date = Date.parse(header);
+  return Number.isNaN(date) ? null : Math.max(0, (date - Date.now()) / 1000);
+}
+
+function rateLimitError(retryAfterSeconds: number): SpotifyApiError {
+  const seconds = Math.ceil(retryAfterSeconds);
+  return new SpotifyApiError(
+    `Spotify limite temporairement les requêtes. Réessaie dans ${seconds} s.`,
+    429,
+    seconds
+  );
+}
+
+// Attend la fin de la pause commune. Si elle est trop longue, échoue tout de suite
+// (inutile d'envoyer une requête dont on sait qu'elle sera refusée)
+async function waitForCooldown(): Promise<void> {
+  const remainingMs = cooldownUntil - Date.now();
+  if (remainingMs <= 0) return;
+  if (remainingMs > MAX_RETRY_AFTER_SECONDS * 1000) throw rateLimitError(remainingMs / 1000);
+  await wait(remainingMs + jitter());
+}
+
+// Dev uniquement : localStorage.setItem('debug_simulate_429', '3') → les 3 prochaines requêtes
+// reçoivent un faux 429 (Retry-After: 2), pour tester le comportement sans vraiment saturer l'API
+function takeSimulated429(): Response | null {
+  if (!isDev) return null;
+  const remaining = Number(localStorage.getItem(SIMULATE_429_KEY) ?? 0);
+  if (!(remaining > 0)) return null;
+  localStorage.setItem(SIMULATE_429_KEY, String(remaining - 1));
+  return new Response(JSON.stringify({ error: { status: 429, message: 'simulated' } }), {
+    status: 429,
+    headers: { 'Retry-After': '2' },
+  });
+}
+
 // Refresh en cours, partagé par les appels simultanés pour n'en faire qu'un seul
 let refreshPromise: Promise<string> | null = null;
 
@@ -96,6 +160,12 @@ export async function spotifyFetch<T>(
   const method = init.method ?? 'GET';
 
   const send = async (token: string): Promise<Response> => {
+    const simulated = takeSimulated429();
+    if (simulated) {
+      debugLog(method, url, 429, '(simulé)');
+      return simulated;
+    }
+
     const startedAt = performance.now();
     let response: Response;
     try {
@@ -117,39 +187,55 @@ export async function spotifyFetch<T>(
     return response;
   };
 
-  let response = await send(await resolveAccessToken(accessToken));
+  let hasRefreshed = false;
 
-  // Token révoqué ou expiré plus tôt que prévu : un refresh puis une seule nouvelle tentative
-  if (response.status === 401 && !accessToken) {
-    response = await send(await refreshSession());
-  }
+  for (let retry = 0; ; retry++) {
+    await waitForCooldown();
+    let response = await send(await resolveAccessToken(accessToken));
 
-  // Rate limit : on attend le délai demandé par Spotify puis une seule nouvelle tentative
-  if (response.status === 429) {
-    const retryAfterSeconds = Number(response.headers.get('Retry-After') ?? 1);
-    if (retryAfterSeconds <= MAX_RETRY_AFTER_SECONDS) {
-      debugLog(`rate limit, nouvelle tentative dans ${retryAfterSeconds}s`);
-      await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
-      response = await send(await resolveAccessToken(accessToken));
+    // Token révoqué ou expiré plus tôt que prévu : un seul refresh, puis on renvoie la requête
+    if (response.status === 401 && !accessToken && !hasRefreshed) {
+      hasRefreshed = true;
+      response = await send(await refreshSession());
     }
-  }
 
-  if (!response.ok) {
+    if (response.ok) {
+      // Certains endpoints (PUT/DELETE) répondent 204 sans corps
+      if (response.status === 204) return undefined as T;
+      return response.json() as Promise<T>;
+    }
+
+    // Rate limit : pause commune de la durée demandée par Spotify, puis nouvelle tentative
+    if (response.status === 429) {
+      const retryAfterSeconds =
+        parseRetryAfter(response.headers.get('Retry-After')) ?? DEFAULT_RETRY_AFTER_SECONDS;
+      cooldownUntil = Math.max(cooldownUntil, Date.now() + retryAfterSeconds * 1000);
+
+      if (retry >= MAX_RETRIES || retryAfterSeconds > MAX_RETRY_AFTER_SECONDS) {
+        rateLimitWarn(`abandon après ${retry + 1} essai(s)`, method, url);
+        throw rateLimitError(retryAfterSeconds);
+      }
+      rateLimitWarn(
+        `429, nouvelle tentative ${retry + 1}/${MAX_RETRIES} dans ${retryAfterSeconds}s`,
+        method,
+        url
+      );
+      continue;
+    }
+
+    // Erreur serveur passagère : attente croissante (500 ms, 1 s), GET uniquement
+    if (RETRYABLE_SERVER_STATUSES.has(response.status) && method === 'GET' && retry < MAX_RETRIES) {
+      const delayMs = SERVER_RETRY_BASE_DELAY_MS * 2 ** retry + jitter();
+      debugLog(`${response.status}, nouvelle tentative dans ${Math.round(delayMs)}ms`, url);
+      await wait(delayMs);
+      continue;
+    }
+
     // Format d'erreur Spotify : { error: { status, message } }
     const errorBody = await response.json().catch(() => null);
     const message = errorBody?.error?.message ?? response.statusText;
-    const retryAfter = response.headers.get('Retry-After');
-    throw new SpotifyApiError(
-      `Spotify API ${response.status} : ${message}`,
-      response.status,
-      retryAfter ? Number(retryAfter) : undefined
-    );
+    throw new SpotifyApiError(`Spotify API ${response.status} : ${message}`, response.status);
   }
-
-  // Certains endpoints (PUT/DELETE) répondent 204 sans corps
-  if (response.status === 204) return undefined as T;
-
-  return response.json() as Promise<T>;
 }
 
 // Suit les liens "next" d'un endpoint paginé et concatène les items

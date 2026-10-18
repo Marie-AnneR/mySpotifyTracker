@@ -90,7 +90,8 @@ async function waitForCooldown(): Promise<void> {
 // Dev uniquement : localStorage.setItem('debug_simulate_429', '3') → les 3 prochaines requêtes
 // reçoivent un faux 429 (Retry-After: 2), pour tester le comportement sans vraiment saturer l'API
 function takeSimulated429(): Response | null {
-  if (!isDev) return null;
+  // Pas de localStorage côté serveur (route API)
+  if (!isDev || typeof window === 'undefined') return null;
   const remaining = Number(localStorage.getItem(SIMULATE_429_KEY) ?? 0);
   if (!(remaining > 0)) return null;
   localStorage.setItem(SIMULATE_429_KEY, String(remaining - 1));
@@ -139,6 +140,11 @@ async function resolveAccessToken(explicitToken?: string): Promise<string> {
     return refreshSession();
   }
   return session.accessToken;
+}
+
+// Token valide de la session du navigateur (rafraîchi si besoin), pour l'envoyer à nos routes API
+export function getValidAccessToken(): Promise<string> {
+  return resolveAccessToken();
 }
 
 function buildUrl(pathOrUrl: string, params?: SpotifyFetchOptions['params']): string {

@@ -15,20 +15,23 @@ interface GetLikedTracksOptions {
   maxTracks?: number;
   // Appelé après chaque page, pour afficher une progression
   onProgress?: (loaded: number, total: number) => void;
-}
-
-function fetchPage(offset: number) {
-  return spotifyFetch<SpotifyPage<unknown>>('/me/tracks', {
-    params: { limit: PAGE_SIZE, offset },
-  });
+  // Token explicite (côté serveur, sans localStorage) ; sinon celui de la session du navigateur
+  accessToken?: string;
 }
 
 // Récupère toute la bibliothèque, triée du like le plus récent au plus ancien
 export async function getLikedTracks({
   maxTracks = 10_000,
   onProgress,
+  accessToken,
 }: GetLikedTracksOptions = {}): Promise<LikedTrack[]> {
   const startedAt = performance.now();
+
+  const fetchPage = (offset: number) =>
+    spotifyFetch<SpotifyPage<unknown>>('/me/tracks', {
+      params: { limit: PAGE_SIZE, offset },
+      accessToken,
+    });
 
   // 1re page : donne le total, qui permet de lancer les suivantes en parallèle
   const firstPage = await fetchPage(0);

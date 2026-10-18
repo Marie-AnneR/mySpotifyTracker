@@ -10,9 +10,10 @@ const FEATURES = [
     text: "Ton historique d'écoute, enregistré au fil du temps",
   },
   {
-    // Vrai tant que tout reste dans le localStorage : à revoir si un backend est ajouté
+    // Depuis #16, les snapshots sont stockés en base : on ne promet plus "tout dans le navigateur".
+    // Une suppression des données à la demande reste à prévoir (cf. docs/database.md)
     emoji: '🔒',
-    text: 'Tes données restent dans ton navigateur',
+    text: "Tes données ne servent qu'à toi, et ne sont enregistrées que si tu le demandes",
   },
 ];
 

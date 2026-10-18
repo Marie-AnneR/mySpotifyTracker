@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import SnapshotCard from '@/components/home/SnapshotCard';
 import CoverImage from '@/components/wrapped/CoverImage';
 import KpiCard, { EmptyMessage } from '@/components/wrapped/KpiCard';
 import { usePlayHistory } from '@/hooks/usePlayHistory';
@@ -74,6 +75,8 @@ export default function LoggedInHome({ user }: { user: User }) {
           <EmptyMessage>Ton historique se construira au fil de tes visites.</EmptyMessage>
         )}
       </KpiCard>
+
+      <SnapshotCard />
 
       <button
         onClick={clearSession}

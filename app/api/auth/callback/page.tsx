@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { enableAutoSnapshots } from '@/services/autoSnapshots';
 import { exchangeCodeForToken } from '@/services/spotifyAuth';
+import { AUTH_STORAGE_KEYS } from '@/services/spotifyAuthFlow';
 import { saveSession } from '@/services/spotifySession';
 import { fetchCurrentUser } from '@/services/spotifyUser';
 
@@ -31,9 +33,11 @@ function CallbackContent() {
     if (hasExchanged.current || !code) return;
     hasExchanged.current = true;
 
-    const verifier = localStorage.getItem('spotify_code_verifier');
-    const expectedState = localStorage.getItem('spotify_auth_state');
-    localStorage.removeItem('spotify_auth_state');
+    const verifier = localStorage.getItem(AUTH_STORAGE_KEYS.verifier);
+    const expectedState = localStorage.getItem(AUTH_STORAGE_KEYS.state);
+    const intent = localStorage.getItem(AUTH_STORAGE_KEYS.intent) ?? 'login';
+    localStorage.removeItem(AUTH_STORAGE_KEYS.state);
+    localStorage.removeItem(AUTH_STORAGE_KEYS.intent);
     if (!expectedState || searchParams.get('state') !== expectedState) {
       // Asynchrone pour respecter react-hooks/set-state-in-effect
       Promise.resolve().then(() =>
@@ -51,15 +55,25 @@ function CallbackContent() {
 
     exchangeCodeForToken(code, verifier)
       .then(async (tokens) => {
-        const user = await fetchCurrentUser(tokens.accessToken);
-        saveSession({ ...tokens, user });
-        localStorage.removeItem('spotify_code_verifier');
+        localStorage.removeItem(AUTH_STORAGE_KEYS.verifier);
+        if (intent === 'auto-snapshots') {
+          // Autorisation dédiée au serveur : le refresh token part en base (chiffré),
+          // la session du navigateur reste intacte
+          await enableAutoSnapshots(tokens.refreshToken);
+        } else {
+          const user = await fetchCurrentUser(tokens.accessToken);
+          saveSession({ ...tokens, user });
+        }
         // replace : l'URL contenant le code ne reste pas dans l'historique
         router.replace('/');
       })
       .catch((err) => {
         console.error('[OAuth callback]', err);
-        setExchangeError(err.message ?? "Échec de l'échange du token");
+        setExchangeError(
+          intent === 'auto-snapshots'
+            ? `Activation des snapshots automatiques impossible : ${err.message}`
+            : (err.message ?? "Échec de l'échange du token")
+        );
       });
   }, [code, paramError, router, searchParams]);
 

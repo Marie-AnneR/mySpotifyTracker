@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import AutoSnapshotToggle from '@/components/home/AutoSnapshotToggle';
 import KpiCard, { EmptyMessage } from '@/components/wrapped/KpiCard';
 import { createSnapshot, listSnapshots, SnapshotRunSummary } from '@/services/snapshots';
 
@@ -79,6 +80,8 @@ export default function SnapshotCard() {
               {status.message}
             </p>
           )}
+
+          <AutoSnapshotToggle />
         </div>
       )}
     </KpiCard>

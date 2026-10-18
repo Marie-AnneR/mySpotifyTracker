@@ -12,11 +12,16 @@ import { TimeRange } from '@/types/spotify';
 
 // Accès aux données des snapshots — SERVEUR UNIQUEMENT (utilise DATABASE_URL)
 
+export type SnapshotSource = 'manual' | 'scheduled';
+
 export interface SnapshotData {
   user: User;
+  source: SnapshotSource;
   topTracks: { timeRange: TimeRange; tracks: Track[] }[];
   topArtists: { timeRange: TimeRange; artists: Artist[] }[];
   likedTracks: LikedTrack[];
+  // false = bibliothèque inchangée depuis le dernier snapshot stocké : on ne recopie pas les likes
+  storeLikes: boolean;
 }
 
 export interface SnapshotRunSummary {
@@ -36,6 +41,49 @@ function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
   return chunks;
+}
+
+// Crée l'utilisateur à sa première écriture en base, met à jour son nom/avatar ensuite
+function upsertUserQuery(user: User, now = new Date()) {
+  return getDb()
+    .insert(users)
+    .values({ id: user.id, displayName: user.displayName, imageUrl: user.imageUrl })
+    .onConflictDoUpdate({
+      target: users.id,
+      set: { displayName: user.displayName, imageUrl: user.imageUrl, updatedAt: now },
+    });
+}
+
+export async function upsertUser(user: User): Promise<void> {
+  await upsertUserQuery(user);
+}
+
+// IDs des likes du dernier snapshot qui a réellement stocké la bibliothèque (null si aucun)
+export async function getLatestStoredLikeIds(userId: string): Promise<Set<string> | null> {
+  const db = getDb();
+  const [latest] = await db
+    .select({ id: snapshotRuns.id })
+    .from(snapshotRuns)
+    .where(and(eq(snapshotRuns.userId, userId), eq(snapshotRuns.likedTracksStored, true)))
+    .orderBy(desc(snapshotRuns.createdAt))
+    .limit(1);
+  if (!latest) return null;
+
+  const rows = await db
+    .select({ trackId: likedTracksSnapshots.trackId })
+    .from(likedTracksSnapshots)
+    .where(eq(likedTracksSnapshots.runId, latest.id));
+  return new Set(rows.map((row) => row.trackId));
+}
+
+// Un snapshot existe-t-il déjà depuis cette date ? (évite un doublon cron + bouton le même jour)
+export async function hasSnapshotSince(userId: string, since: Date): Promise<boolean> {
+  const [run] = await getDb()
+    .select({ id: snapshotRuns.id })
+    .from(snapshotRuns)
+    .where(and(eq(snapshotRuns.userId, userId), gte(snapshotRuns.createdAt, since)))
+    .limit(1);
+  return run !== undefined;
 }
 
 export async function saveSnapshot(data: SnapshotData): Promise<SnapshotRunSummary> {
@@ -73,7 +121,7 @@ export async function saveSnapshot(data: SnapshotData): Promise<SnapshotRunSumma
     }))
   );
 
-  const likedRows = data.likedTracks.map((like) => ({
+  const likedRows = (data.storeLikes ? data.likedTracks : []).map((like) => ({
     runId,
     trackId: like.track.id,
     addedAt: new Date(like.addedAtMs),
@@ -87,23 +135,17 @@ export async function saveSnapshot(data: SnapshotData): Promise<SnapshotRunSumma
   const summary = {
     id: runId,
     createdAt: now.toISOString(),
-    source: 'manual',
+    source: data.source,
     topTracksCount: topTrackRows.length,
     topArtistsCount: topArtistRows.length,
-    likedTracksCount: likedRows.length,
+    // Taille de la bibliothèque, même quand les lignes ne sont pas recopiées
+    likedTracksCount: data.likedTracks.length,
   };
 
   // batch = une seule transaction : soit tout est enregistré, soit rien
   // (pas de snapshot à moitié écrit si une requête échoue en route)
   const [first, ...rest] = [
-    // Crée l'utilisateur au premier snapshot, met à jour son nom/avatar ensuite
-    db
-      .insert(users)
-      .values({ id: data.user.id, displayName: data.user.displayName, imageUrl: data.user.imageUrl })
-      .onConflictDoUpdate({
-        target: users.id,
-        set: { displayName: data.user.displayName, imageUrl: data.user.imageUrl, updatedAt: now },
-      }),
+    upsertUserQuery(data.user, now),
     db.insert(snapshotRuns).values({
       id: runId,
       userId: data.user.id,
@@ -112,6 +154,7 @@ export async function saveSnapshot(data: SnapshotData): Promise<SnapshotRunSumma
       topTracksCount: summary.topTracksCount,
       topArtistsCount: summary.topArtistsCount,
       likedTracksCount: summary.likedTracksCount,
+      likedTracksStored: data.storeLikes,
     }),
     ...chunk(topTrackRows, INSERT_CHUNK_SIZE).map((rows) => db.insert(topTracksSnapshots).values(rows)),
     ...chunk(topArtistRows, INSERT_CHUNK_SIZE).map((rows) =>

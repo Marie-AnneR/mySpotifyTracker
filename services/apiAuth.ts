@@ -1,3 +1,4 @@
+import { TokenRefreshError } from '@/services/spotifyAuth';
 import { SpotifyApiError } from '@/services/spotifyClient';
 import { fetchCurrentUser } from '@/services/spotifyUser';
 
@@ -28,6 +29,12 @@ export function errorResponse(err: unknown, route: string, fallbackMessage: stri
         status,
         headers: err.retryAfter ? { 'Retry-After': String(err.retryAfter) } : undefined,
       }
+    );
+  }
+  if (err instanceof TokenRefreshError && err.revoked) {
+    return Response.json(
+      { error: 'Autorisation Spotify invalide ou expirée, réessaie' },
+      { status: 400 }
     );
   }
   console.error(`[${route}]`, err);

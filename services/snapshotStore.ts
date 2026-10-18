@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt } from 'drizzle-orm';
 import { getDb } from '@/db';
 import {
   likedTracksSnapshots,
@@ -122,6 +122,134 @@ export async function saveSnapshot(data: SnapshotData): Promise<SnapshotRunSumma
   await db.batch([first, ...rest]);
 
   return summary;
+}
+
+// --- Lecture pour le wrap mensuel (#17) ---
+
+export async function getSnapshotRunsBetween(
+  userId: string,
+  start: Date,
+  end: Date
+): Promise<{ id: string; createdAtMs: number }[]> {
+  const runs = await getDb()
+    .select({ id: snapshotRuns.id, createdAt: snapshotRuns.createdAt })
+    .from(snapshotRuns)
+    .where(
+      and(
+        eq(snapshotRuns.userId, userId),
+        gte(snapshotRuns.createdAt, start),
+        lt(snapshotRuns.createdAt, end)
+      )
+    )
+    .orderBy(asc(snapshotRuns.createdAt));
+  return runs.map((run) => ({ id: run.id, createdAtMs: run.createdAt.getTime() }));
+}
+
+// Tops "short_term" (~4 semaines) des snapshots donnés, convertis en modèles internes.
+// Les champs non stockés (explicit, releaseDate, spotifyUrl) prennent leur valeur par défaut.
+export interface ShortTermTops {
+  tracks: { runId: string; rank: number; track: Track }[];
+  artists: { runId: string; rank: number; artist: Artist }[];
+}
+
+export async function getShortTermTops(runIds: string[]): Promise<ShortTermTops> {
+  if (runIds.length === 0) return { tracks: [], artists: [] };
+  const db = getDb();
+
+  const [trackRows, artistRows] = await Promise.all([
+    db
+      .select()
+      .from(topTracksSnapshots)
+      .where(
+        and(inArray(topTracksSnapshots.runId, runIds), eq(topTracksSnapshots.timeRange, 'short_term'))
+      ),
+    db
+      .select()
+      .from(topArtistsSnapshots)
+      .where(
+        and(
+          inArray(topArtistsSnapshots.runId, runIds),
+          eq(topArtistsSnapshots.timeRange, 'short_term')
+        )
+      ),
+  ]);
+
+  return {
+    tracks: trackRows.map((row) => ({
+      runId: row.runId,
+      rank: row.rank,
+      track: {
+        id: row.trackId,
+        name: row.name,
+        artists: row.artists,
+        album: {
+          id: row.albumId,
+          name: row.albumName,
+          imageUrl: row.albumImageUrl,
+          releaseDate: null,
+        },
+        durationMs: row.durationMs,
+        popularity: row.popularity,
+        explicit: false,
+        spotifyUrl: null,
+      } satisfies Track,
+    })),
+    artists: artistRows.map((row) => ({
+      runId: row.runId,
+      rank: row.rank,
+      artist: {
+        id: row.artistId,
+        name: row.name,
+        genres: row.genres,
+        imageUrl: row.imageUrl,
+        popularity: row.popularity,
+        spotifyUrl: null,
+      } satisfies Artist,
+    })),
+  };
+}
+
+// Titres likés pendant la période, d'après TOUS les snapshots de l'utilisateur :
+// un titre liké puis retiré entre deux snapshots apparaît quand même s'il a été capturé une fois
+export async function getLikedTracksBetween(
+  userId: string,
+  start: Date,
+  end: Date
+): Promise<LikedTrack[]> {
+  const rows = await getDb()
+    .select({ like: likedTracksSnapshots })
+    .from(likedTracksSnapshots)
+    .innerJoin(snapshotRuns, eq(likedTracksSnapshots.runId, snapshotRuns.id))
+    .where(
+      and(
+        eq(snapshotRuns.userId, userId),
+        gte(likedTracksSnapshots.addedAt, start),
+        lt(likedTracksSnapshots.addedAt, end)
+      )
+    )
+    .orderBy(desc(likedTracksSnapshots.addedAt));
+
+  // Un même like est présent dans chaque snapshot qui l'a capturé : on dédoublonne par titre
+  const byTrack = new Map<string, LikedTrack>();
+  for (const { like } of rows) {
+    if (byTrack.has(like.trackId)) continue;
+    byTrack.set(like.trackId, {
+      addedAt: like.addedAt.toISOString(),
+      addedAtMs: like.addedAt.getTime(),
+      track: {
+        id: like.trackId,
+        name: like.name,
+        artists: like.artists,
+        // L'id d'album n'est pas stocké pour les likes (inutile aux KPIs de likes)
+        album: { id: '', name: like.albumName, imageUrl: like.albumImageUrl, releaseDate: null },
+        durationMs: like.durationMs,
+        popularity: null,
+        explicit: false,
+        spotifyUrl: null,
+      },
+    });
+  }
+  return [...byTrack.values()];
 }
 
 export async function listSnapshotRuns(userId: string, limit = 20): Promise<SnapshotRunSummary[]> {

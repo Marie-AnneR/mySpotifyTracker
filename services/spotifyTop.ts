@@ -10,13 +10,15 @@ export interface TopItemsOptions {
   timeRange?: TimeRange;
   limit?: number;
   offset?: number;
+  // Token explicite (côté serveur, sans localStorage) ; sinon celui de la session du navigateur
+  accessToken?: string;
 }
 
 // Logique commune à /me/top/artists et /me/top/tracks :
 // validation des paramètres, appel API, puis mapping vers le modèle interne
 export async function fetchTopItems<Raw, Model>(
   type: 'artists' | 'tracks',
-  { timeRange = 'medium_term', limit = 20, offset = 0 }: TopItemsOptions,
+  { timeRange = 'medium_term', limit = 20, offset = 0, accessToken }: TopItemsOptions,
   isValid: (item: unknown) => item is Raw,
   toModel: (raw: Raw) => Model
 ): Promise<Model[]> {
@@ -30,6 +32,7 @@ export async function fetchTopItems<Raw, Model>(
   const path = `/me/top/${type}`;
   const page = await spotifyFetch<SpotifyPage<unknown>>(path, {
     params: { time_range: timeRange, limit, offset },
+    accessToken,
   });
 
   if (!Array.isArray(page?.items)) {

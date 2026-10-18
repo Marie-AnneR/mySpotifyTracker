@@ -8,7 +8,7 @@ Mis en place par l'issue #17. Il permet de générer un wrap pour un mois donné
 | Lecture en base | `services/snapshotStore.ts` (`getSnapshotRunsBetween`, `getShortTermTops`, `getLikedTracksBetween`) |
 | API | `GET /api/wraps/monthly?month=AAAA-MM`, dans `app/api/wraps/monthly/route.ts` |
 | Côté navigateur | `services/monthlyWrap.ts` (`getMonthlyWrap`) : enrichissement des genres et calcul des KPIs |
-| Affichage | `components/wrapped/WrapView.tsx`, partagé avec `/wrapped` |
+| Affichage | `components/wrapped/WrapView.tsx`, partagé avec `/stats` |
 | Page de test | `/dev/monthly-wrap` |
 
 ## Le principe

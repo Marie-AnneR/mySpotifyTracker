@@ -39,10 +39,10 @@ export default function LoggedInHome({ user }: { user: User }) {
       </header>
 
       <Link
-        href="/wrapped"
+        href="/stats"
         className="block rounded-full bg-green-500 px-6 py-4 text-center text-lg font-bold text-black hover:bg-green-400"
       >
-        Voir mon Wrapped
+        Voir mes stats
       </Link>
 
       <KpiCard title="Dernière écoute">

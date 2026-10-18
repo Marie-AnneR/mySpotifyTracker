@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "My Spotify Tracker",
-  description: "Ton Wrapped Spotify, quand tu veux : top titres, artistes et genres.",
+  description: "Tes stats Spotify, quand tu veux : top titres, artistes et genres.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

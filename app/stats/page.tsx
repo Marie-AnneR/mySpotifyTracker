@@ -20,9 +20,14 @@ export default function WrappedPage() {
         {/* En-tête collant : les onglets restent accessibles en scrollant */}
         <header className="sticky top-0 z-10 -mx-4 space-y-3 bg-zinc-100/90 px-4 pt-4 pb-3 backdrop-blur dark:bg-black/90">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-extrabold">Ton Wrapped</h1>
-            <Link href="/" className="text-sm text-zinc-500 underline dark:text-zinc-400">
-              Accueil
+            <h1 className="text-2xl font-extrabold">Mes stats</h1>
+            <Link
+              href="/"
+              aria-label="Accueil"
+              title="Accueil"
+              className="rounded-full p-2 text-zinc-600 hover:bg-black/5 dark:text-zinc-300 dark:hover:bg-white/10"
+            >
+              <HomeIcon />
             </Link>
           </div>
           {state.status !== 'unauthenticated' && (
@@ -41,11 +46,31 @@ export default function WrappedPage() {
   );
 }
 
+// Icône maison (SVG inline : pas de bibliothèque d'icônes pour une seule icône)
+function HomeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
+    </svg>
+  );
+}
+
 function LoadingState() {
   return (
     <>
       <p className="text-center text-sm text-zinc-500 dark:text-zinc-400" role="status">
-        Préparation de ton Wrapped… La première fois, la recherche des genres peut prendre jusqu&apos;à
+        Préparation de tes stats… La première fois, la recherche des genres peut prendre jusqu&apos;à
         une minute.
       </p>
       <KpiCardSkeleton />
@@ -58,7 +83,7 @@ function LoadingState() {
 function UnauthenticatedState() {
   return (
     <div className="flex flex-col items-center gap-4 rounded-2xl bg-white p-6 text-center shadow-sm dark:bg-zinc-900">
-      <p>Connecte-toi à Spotify pour découvrir ton Wrapped.</p>
+      <p>Connecte-toi à Spotify pour découvrir tes stats.</p>
       <SpotifyLoginButton />
     </div>
   );
@@ -70,7 +95,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
       role="alert"
       className="flex flex-col items-center gap-4 rounded-2xl bg-white p-6 text-center shadow-sm dark:bg-zinc-900"
     >
-      <p>Impossible de charger ton Wrapped.</p>
+      <p>Impossible de charger tes stats.</p>
       <p className="text-sm text-zinc-500 dark:text-zinc-400">{message}</p>
       <button
         onClick={onRetry}

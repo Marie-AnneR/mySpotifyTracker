@@ -12,7 +12,7 @@ Implémentation : `services/spotifyClient.ts` (`spotifyFetch`). Tous les appels 
 
 | Écran | Requêtes |
 |---|---|
-| `/wrapped` | 6 en parallèle (top tracks et top artists × 3 périodes) |
+| `/stats` | 6 en parallèle (top tracks et top artists × 3 périodes) |
 | liked tracks | 1 + jusqu'à 199 pages, 4 en parallèle |
 | accueil | 1 synchronisation de l'historique par visite |
 
@@ -31,7 +31,7 @@ Les autres erreurs (400, 403, 404…) ne sont jamais retentées : refaire la mê
 ## Côté écrans
 
 - `SpotifyApiError.status === 429` et `retryAfter` (en secondes) permettent d'afficher un message adapté.
-- `/wrapped` affiche le message d'erreur et un bouton « Réessayer ». La page ne plante pas.
+- `/stats` affiche le message d'erreur et un bouton « Réessayer ». La page ne plante pas.
 - La synchro de l'historique (`PlayHistorySync`) échoue silencieusement, avec un log : elle sera relancée à la prochaine visite.
 
 ## Tester
@@ -44,9 +44,9 @@ localStorage.setItem('debug_simulate_429', '3')
 
 Les 3 prochaines requêtes Spotify reçoivent un faux 429 (`Retry-After: 2`), sans appel réseau. Quelques valeurs à essayer :
 
-| Valeur | Résultat attendu sur `/wrapped` |
+| Valeur | Résultat attendu sur `/stats` |
 |---|---|
-| `1` ou `2` | Les requêtes attendent puis réussissent ; le Wrapped s'affiche quelques secondes plus tard |
+| `1` ou `2` | Les requêtes attendent puis réussissent ; les stats s'affichent quelques secondes plus tard |
 | `20` | Les nouvelles tentatives s'épuisent ; l'écran d'erreur s'affiche avec « Réessaie dans 2 s » et « Réessayer » |
 
 Les avertissements `[spotifyClient] rate limit …` apparaissent dans la console, au niveau Warnings.
@@ -55,6 +55,6 @@ Les avertissements `[spotifyClient] rate limit …` apparaissent dans la console
 
 - **La pause commune est propre à l'onglet.** Deux onglets ouverts ne la partagent pas.
 - **Pas de limitation préventive.** On réagit au 429 sans anticiper la limite : pas de file d'attente globale ni de quota local. Pour la V1, la concurrence maximale de 4 sur les liked tracks suffit à éviter la plupart des 429.
-- **Pas de cache des réponses Spotify.** Chaque ouverture de `/wrapped` refait les 6 appels.
+- **Pas de cache des réponses Spotify.** Chaque ouverture de `/stats` refait les 6 appels.
 - **Limite haute à 10 s.** Au-delà, l'utilisateur doit réessayer à la main.
 - **MusicBrainz a son propre limiteur** (1 requête/s, dans `services/artistGenres.ts`), et ses refus ne passent pas par ce client. MusicBrainz signale le dépassement par un 503 : l'artiste concerné est alors marqué en échec, sans mise en cache, et il est retenté au chargement suivant.

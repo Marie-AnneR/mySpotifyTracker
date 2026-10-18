@@ -22,7 +22,7 @@ export default function LoggedOutHome() {
     <div className="space-y-8">
       <header className="space-y-2">
         <h1 className="text-3xl font-extrabold">My Spotify Tracker</h1>
-        <p className="text-lg text-zinc-600 dark:text-zinc-400">Ton Wrapped, quand tu veux.</p>
+        <p className="text-lg text-zinc-600 dark:text-zinc-400">Tes stats Spotify, quand tu veux.</p>
       </header>
 
       <ul className="space-y-4">

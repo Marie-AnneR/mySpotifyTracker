@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -35,16 +36,37 @@ export const snapshotRuns = pgTable(
       // Supprimer un utilisateur supprime ses snapshots
       .references(() => users.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    // 'manual' pour l'instant ; 'scheduled' quand la planification automatique existera
+    // 'manual' (bouton) ou 'scheduled' (cron hebdomadaire)
     source: text('source').notNull(),
     // Nombre de lignes enregistrées, pour vérifier la cohérence sans tout relire
     topTracksCount: integer('top_tracks_count').notNull(),
     topArtistsCount: integer('top_artists_count').notNull(),
+    // Taille de la bibliothèque au moment du snapshot (même si les likes ne sont pas recopiés)
     likedTracksCount: integer('liked_tracks_count').notNull(),
+    // false = bibliothèque identique au dernier snapshot qui l'a stockée : lignes non recopiées
+    // pour économiser l'espace (la bibliothèque est alors celle de ce snapshot précédent)
+    likedTracksStored: boolean('liked_tracks_stored').notNull().default(true),
   },
   // Requête typique : "les snapshots de cet utilisateur, du plus récent au plus ancien"
   (table) => [index('snapshot_runs_user_created_idx').on(table.userId, table.createdAt)]
 );
+
+// Snapshots automatiques : une ligne par utilisateur qui les a activés (opt-in).
+// Supprimer la ligne = désactiver ET effacer le token.
+export const autoSnapshotSettings = pgTable('auto_snapshot_settings', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  // false après un échec définitif (token révoqué) : l'utilisateur doit réactiver
+  enabled: boolean('enabled').notNull().default(true),
+  // Refresh token Spotify propre au serveur, chiffré en AES-256-GCM ("iv.tag.données").
+  // Jamais stocké en clair, jamais renvoyé au navigateur.
+  encryptedRefreshToken: text('encrypted_refresh_token').notNull(),
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const topTracksSnapshots = pgTable(
   'top_tracks_snapshots',

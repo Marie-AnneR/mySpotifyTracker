@@ -54,6 +54,17 @@ export async function exchangeCodeForToken(
   };
 }
 
+export class TokenRefreshError extends Error {
+  // true = refresh token révoqué ou expiré (invalid_grant) : inutile de réessayer
+  revoked: boolean;
+
+  constructor(message: string, revoked: boolean) {
+    super(message);
+    this.name = 'TokenRefreshError';
+    this.revoked = revoked;
+  }
+}
+
 // Flow PKCE : pas de client secret, le client_id suffit
 export async function refreshAccessToken(
   refreshToken: string
@@ -72,7 +83,10 @@ export async function refreshAccessToken(
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`Spotify token refresh failed: ${errorBody}`);
+    throw new TokenRefreshError(
+      `Spotify token refresh failed: ${errorBody}`,
+      response.status === 400 && errorBody.includes('invalid_grant')
+    );
   }
 
   const data = await response.json();
